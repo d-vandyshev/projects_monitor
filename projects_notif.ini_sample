@@ -1,0 +1,22 @@
+[main]
+# Skip or process sources of projects
+FR_monitor = true
+FL_monitor = false
+
+# Match skills on freelance.com
+fr_skills = Golang, Ruby on Rails, Ruby
+
+# Match desc of project on fl.ru
+fl_match = ruby, rails
+
+# Time between retrieve and parse
+sleeptime = 60
+
+# Every day hello message to email
+hellotime = 10:00
+
+[mail]
+login = login123
+pass = pass123
+smtp_host = smtp.mail.ru
+smtp_port = 587
