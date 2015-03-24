@@ -110,7 +110,7 @@ class ProjectMonitor
       price = td.text
 
       #Source
-      source = :freelancer_com
+      source = :FR
 
       projects << Project.new(title, url, desc, bids, skills, price, source)
     end
@@ -146,7 +146,7 @@ class ProjectMonitor
       price = i.css('.b-post__price').text.strip!
 
       #Source
-      source = :fl_com
+      source = :FL
 
       projects << Project.new(title, url, desc, bids, '', price, source)
     end
@@ -183,7 +183,7 @@ class Project
   end
 
   def to_s
-    "#{ @title }\nurl: #{ @url }\nskills:#{ @skills }\nprice:#{ @price }\nbids:#{ @bids }\nDESC:#{ @desc }"
+    "Price:#{ @price }\nSkills:#{ @skills }\nUrl: #{ @url }\nBids:#{ @bids }\nDesc:#{ @desc }"
   end
 end
 
