@@ -13,8 +13,8 @@ class ProjectMonitor
 
     conf = IniFile.load(attr[:config])
     abort "Unable to read config file #{CONFIG_FILE}" unless conf
-    @fr_monitor = conf[:main]['fr_monitor']
-    @fl_monitor = conf[:main]['fl_monitor']
+    @fr_monitor = conf[:main]['FR_monitor']
+    @fl_monitor = conf[:main]['FL_monitor']
     @fr_skills = conf[:main]['fr_skills'].split /,\s*/
     @fl_match  = conf[:main]['fl_match'].split /,\s*/
     @sleeptime = conf[:main]['sleeptime'].to_i
@@ -59,7 +59,7 @@ class ProjectMonitor
       # send projects via email
       @projects.each do |p|
         subject = "Subject: #{ p.source }: #{ p.title }"
-        Notif.send subject, p.to_s
+        @notif.send subject, p.to_s
       end
 
       sleep @sleeptime
@@ -75,7 +75,7 @@ class ProjectMonitor
   end
 
   def freelancer_com
-    url = 'https://www.freelancer.com/job/'
+    url = 'https://www.freelancer.com/jobs/1/'
     page = Nokogiri::HTML(open(url))
     projects = Array.new
     page.css('tr.project-details').each do |tr|
