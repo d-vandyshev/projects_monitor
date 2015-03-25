@@ -2,6 +2,7 @@
 # Skip or process sources of projects
 FR_monitor = true
 FL_monitor = false
+OD_monitor = false
 
 # Match skills on freelance.com
 fr_skills = Golang, Ruby on Rails, Ruby

@@ -7,6 +7,7 @@ class ProjectMonitor
   require 'open-uri'
   require 'net/smtp'
   require 'inifile'
+  require 'rss'
 
   def initialize(attr)
     @sent_projects = Array.new
@@ -15,8 +16,10 @@ class ProjectMonitor
     abort "Unable to read config file #{CONFIG_FILE}" unless conf
     @fr_monitor = conf[:main]['FR_monitor']
     @fl_monitor = conf[:main]['FL_monitor']
+    @od_monitor = conf[:main]['OD_monitor']
     @fr_skills = conf[:main]['fr_skills'].split /,\s*/
     @fl_match  = conf[:main]['fl_match'].split /,\s*/
+    @od_match  = conf[:main]['od_match'].split /,\s*/
     @sleeptime = conf[:main]['sleeptime'].to_i
     @notif = Notif.new(
         smtp_host: conf[:mail]['smtp_host'],
@@ -45,8 +48,11 @@ class ProjectMonitor
         # http://fl.ru
         @projects += fl_ru if @fl_monitor
 
+        # http://odesk.com
+        @projects += odesk_com if @od_monitor
+
       rescue => e
-        puts "Error while get projects!"
+        puts 'Error while get projects!'
         e_mess = "#{e.class}: #{e.message}"
         puts e_mess
         @notif.send 'Projects Notifier: Ошибка получения проектов!', e_mess
@@ -149,6 +155,18 @@ class ProjectMonitor
       source = :FL
 
       projects << Project.new(title, url, desc, bids, '', price, source)
+    end
+    projects
+  end
+
+  def odesk_com
+    uri = URI(URI.encode('https://www.odesk.com/jobs/rss?_redirected'))
+    feed = RSS::Parser.parse(open(uri))
+    projects = Array.new
+    feed.items.each do |item|
+      puts "T: #{item.title}"
+      next unless @od_match.any? { |w| item.description =~ /#{w}/i }
+      projects << Project.new(item.title, item.link, item.description, '-', '', '', :OD)
     end
     projects
   end
