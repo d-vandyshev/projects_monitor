@@ -9,6 +9,12 @@ class ProjectMonitor
   require 'inifile'
   require 'rss'
 
+  Project = Struct.new(:title, :url, :desc, :bids, :skills, :price, :source) do
+    def to_s
+      "Price:#{price}\nSkills:#{skills}\nUrl: #{url}\nBids:#{bids}\nDesc:#{desc}"
+    end
+  end
+
   def initialize(attr)
     @sent_projects = Array.new
 
@@ -36,6 +42,7 @@ class ProjectMonitor
 
   def start
     puts 'start ProjectsMonitor'
+
     while true do
       @notif.hello if time_for_hello?
 
@@ -85,40 +92,31 @@ class ProjectMonitor
     page = Nokogiri::HTML(open(url))
     projects = Array.new
     page.css('tr.project-details').each do |tr|
+      p = Project.new
       td = tr.child
 
       #Title and URL
       td = td.next_element
       td.css('ul.promotions').remove
-      title = td.css('a').text.strip!
-      url = td.css('a').attribute('href')
+      p.title = td.css('a').text.strip!
+      p.url = td.css('a').attribute('href')
 
-      #Description
       td = td.next_element
-      desc = td.text
-
-      #Bids
+      p.desc = td.text
       td = td.next_element
-      bids = td.text
+      p.bids = td.text
 
-      #Skills
       td = td.next_element
       a = td.css('a').map { |a| a.text }
-      skills = @fr_skills & a
-      next if skills.count == 0
+      p.skills = @fr_skills & a
+      next if p.skills.count == 0
 
-      #Skip Start and End
       td = td.next_element
       td = td.next_element
-
-      #Price
       td = td.next_element
-      price = td.text
-
-      #Source
-      source = :FR
-
-      projects << Project.new(title, url, desc, bids, skills, price, source)
+      p.price = td.text
+      p.source = :FR
+      projects << p
     end
     projects
   end
@@ -132,29 +130,18 @@ class ProjectMonitor
     text.gsub! '<script type="text/javascript">document.write(\'', ''
     page = Nokogiri::HTML(text)
 
-    projects = Array.new
+    projects = []
     page.css('div#projects-list div.b-post').each do |i|
-      #Title
-      title = i.css('h2 a').text
-
-      # URL
-      url = base_url + i.css('h2 a').attribute('href')
-
-      #Description
-      desc = i.css('div.b-post__body').text.strip!
+      p = Project.new
+      p.title = i.css('h2 a').text
+      p.url = base_url + i.css('h2 a').attribute('href')
+      p.desc = i.css('div.b-post__body').text.strip!
       #Find keywords matches
-      next unless @fl_match.any? { |w| desc =~ /#{w}/i }
-
-      #Bids
-      bids = i.css('a.b-post__link_bold.b-page__desktop').text
-
-      #Price
-      price = i.css('.b-post__price').text.strip!
-
-      #Source
-      source = :FL
-
-      projects << Project.new(title, url, desc, bids, '', price, source)
+      next unless @fl_match.any? { |w| p.desc =~ /#{w}/i }
+      p.bids = i.css('a.b-post__link_bold.b-page__desktop').text
+      p.price = i.css('.b-post__price').text.strip!
+      p.source = :FL
+      projects << p
     end
     projects
   end
@@ -162,9 +149,8 @@ class ProjectMonitor
   def odesk_com
     uri = URI(URI.encode(@od_rss))
     feed = RSS::Parser.parse(open(uri))
-    projects = Array.new
+    projects = []
     feed.items.each do |item|
-      puts "T: #{item.title}"
       projects << Project.new(item.title, item.link, item.description, '-', '', '', :OD)
     end
     projects
@@ -191,18 +177,18 @@ class ProjectMonitor
 
 end
 
-class Project
-  attr_reader :source, :title, :desc
-
-  def initialize(title, url, desc, bids, skills, price, source)
-    @title, @url, @desc, @bids, @skills, @price, @source = title, url, desc, bids, skills, price, source
-    @mail_subject = "Subject: #{ @source }: #{ @title }"
-  end
-
-  def to_s
-    "Price:#{ @price }\nSkills:#{ @skills }\nUrl: #{ @url }\nBids:#{ @bids }\nDesc:#{ @desc }"
-  end
-end
+# class Project
+#   attr_reader :source, :title, :desc
+#
+#   def initialize(title, url, desc, bids, skills, price, source)
+#     @title, @url, @desc, @bids, @skills, @price, @source = title, url, desc, bids, skills, price, source
+#     @mail_subject = "Subject: #{ @source }: #{ @title }"
+#   end
+#
+#   def to_s
+#     "Price:#{ @price }\nSkills:#{ @skills }\nUrl: #{ @url }\nBids:#{ @bids }\nDesc:#{ @desc }"
+#   end
+# end
 
 class Notif
 
