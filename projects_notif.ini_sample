@@ -14,10 +14,10 @@ od_rss = https://www.odesk.com/find-work-home/rss/?topic=111111&securityToken=XX
 fl_match = ruby, rails
 
 # Time between retrieve and parse
-sleeptime = 60
+sleep_time = 60
 
 # Every day hello message to email
-hellotime = 10:00
+hello_time = 10:00
 
 [mail]
 login = login123
