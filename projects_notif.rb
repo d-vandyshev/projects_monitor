@@ -15,82 +15,86 @@ class ProjectMonitor
     end
   end
 
-  def initialize(attr)
-    @sent_projects = Array.new
+  Config = Struct.new(:config_file, :fr_monitor, :fl_monitor, :od_monitor,
+                      :fr_skills, :fl_match, :od_rss,
+                      :sleep_time, :hello_time,
+                      :mail_login, :mail_pass,
+                      :smtp_host, :smtp_port) do
+    def read
+      c = IniFile.load(self.config_file)
+      abort "Unable to read ini-file #{self.config_file}" unless c
+      self.fr_monitor = c[:main]['FR_monitor']
+      self.fl_monitor = c[:main]['FL_monitor']
+      self.od_monitor = c[:main]['OD_monitor']
+      self.fr_skills  = c[:main]['fr_skills'].split /,\s*/
+      self.fl_match   = c[:main]['fl_match'].split /,\s*/
+      self.od_rss     = c[:main]['od_rss']
+      self.sleep_time = c[:main]['sleep_time'].to_i
+      self.hello_time = c[:main]['hello_time']
+      self.smtp_host  = c[:mail]['smtp_host']
+      self.smtp_port  = c[:mail]['smtp_port']
+      self.mail_login = c[:mail]['login']
+      self.mail_pass  = c[:mail]['pass']
+    end
+  end
 
-    conf = IniFile.load(attr[:config])
-    abort "Unable to read config file #{CONFIG_FILE}" unless conf
-    @fr_monitor = conf[:main]['FR_monitor']
-    @fl_monitor = conf[:main]['FL_monitor']
-    @od_monitor = conf[:main]['OD_monitor']
-    @fr_skills = conf[:main]['fr_skills'].split /,\s*/
-    @fl_match  = conf[:main]['fl_match'].split /,\s*/
-    @od_rss  = conf[:main]['od_rss']
-    @sleeptime = conf[:main]['sleeptime'].to_i
+  def initialize(config_file)
+    @conf = Config.new config_file
+    @conf.read
+
     @notif = Notif.new(
-        smtp_host: conf[:mail]['smtp_host'],
-        smtp_port: conf[:mail]['smtp_port'].to_i,
-        login:     conf[:mail]['login'],
-        pass:      conf[:mail]['pass']
+        smtp_host: @conf.smtp_host,
+        smtp_port: @conf.smtp_port,
+        login:     @conf.mail_login,
+        pass:      @conf.mail_pass
     )
 
-    @hello_hour, @hello_minute = conf[:main]['hellotime'].split(':')
-    @notif.hello
     @hello_send_day = Time.new(Time.now.year, Time.now.month, Time.now.day)
-    @sent_hello = true
+    @sent_hello = false
   end
 
   def start
     puts 'start ProjectsMonitor'
+    sent_projects = []
 
-    while true do
-      @notif.hello if time_for_hello?
+    loop do
+      @conf.read
 
+      # @notif.hello if time_for_hello?
+
+      projects = []
       begin
-        @projects = Array.new
-
-        # http://freelancer.com
-        @projects += freelancer_com if @fr_monitor
-
-        # http://fl.ru
-        @projects += fl_ru if @fl_monitor
-
-        # http://odesk.com
-        @projects += odesk_com if @od_monitor
-
+        projects += freelancer_com if @conf.fr_monitor
+        projects += fl_ru if @conf.fl_monitor
+        projects += odesk_com if @conf.od_monitor
       rescue => e
         puts 'Error while get projects!'
         e_mess = "#{e.class}: #{e.message}"
         puts e_mess
         @notif.send 'Projects Notifier: Ошибка получения проектов!', e_mess
       end
+      # delete sent project to not send dups of projects
+      projects.delete_if { |p| sent_projects.include?(p.desc) }
+      projects.each { |p| sent_projects << p.desc }
+      sent_projects = sent_projects.pop(100)
 
-      # delete sent projects from array
-      delete_sent!
-
-      puts Time.now.to_s + " ProjectsMonitor receives #{ @projects.length } projects"
+      puts Time.now.to_s + " ProjectsMonitor receives #{projects.length} projects"
       # send projects via email
-      @projects.each do |p|
+      projects.each do |p|
         subject = "Subject: #{ p.source }: #{ p.title }"
         @notif.send subject, p.to_s
       end
 
-      sleep @sleeptime
+      sleep @conf.sleep_time
     end
   end
 
   private
 
-  def delete_sent!
-    @projects.delete_if { |p| @sent_projects.include?(p.desc) }
-    @projects.each { |p| @sent_projects << p.desc }
-    @sent_projects = @sent_projects.pop(100)
-  end
-
   def freelancer_com
     url = 'https://www.freelancer.com/jobs/1/'
     page = Nokogiri::HTML(open(url))
-    projects = Array.new
+    projects = []
     page.css('tr.project-details').each do |tr|
       p = Project.new
       td = tr.child
@@ -108,7 +112,7 @@ class ProjectMonitor
 
       td = td.next_element
       a = td.css('a').map { |a| a.text }
-      p.skills = @fr_skills & a
+      p.skills = @conf.fr_skills & a
       next if p.skills.count == 0
 
       td = td.next_element
@@ -137,7 +141,7 @@ class ProjectMonitor
       p.url = base_url + i.css('h2 a').attribute('href')
       p.desc = i.css('div.b-post__body').text.strip!
       #Find keywords matches
-      next unless @fl_match.any? { |w| p.desc =~ /#{w}/i }
+      next unless @conf.fl_match.any? { |w| p.desc =~ /#{w}/i }
       p.bids = i.css('a.b-post__link_bold.b-page__desktop').text
       p.price = i.css('.b-post__price').text.strip!
       p.source = :FL
@@ -147,7 +151,7 @@ class ProjectMonitor
   end
 
   def odesk_com
-    uri = URI(URI.encode(@od_rss))
+    uri = URI(URI.encode(@conf.od_rss))
     feed = RSS::Parser.parse(open(uri))
     projects = []
     feed.items.each do |item|
@@ -166,7 +170,8 @@ class ProjectMonitor
 
     # Check for hello time
     now = Time.new
-    today_send_time = Time.new(Time.now.year, Time.now.month, Time.now.day, @hello_hour, @hello_minute)
+    hello_hour, hello_minute = @conf.hello_time.split(':')
+    today_send_time = Time.new(Time.now.year, Time.now.month, Time.now.day, hello_hour, hello_minute)
     if !@sent_hello and (now <=> today_send_time) == 1
       @sent_hello = true
       true
@@ -174,21 +179,7 @@ class ProjectMonitor
       false
     end
   end
-
 end
-
-# class Project
-#   attr_reader :source, :title, :desc
-#
-#   def initialize(title, url, desc, bids, skills, price, source)
-#     @title, @url, @desc, @bids, @skills, @price, @source = title, url, desc, bids, skills, price, source
-#     @mail_subject = "Subject: #{ @source }: #{ @title }"
-#   end
-#
-#   def to_s
-#     "Price:#{ @price }\nSkills:#{ @skills }\nUrl: #{ @url }\nBids:#{ @bids }\nDesc:#{ @desc }"
-#   end
-# end
 
 class Notif
 
@@ -220,5 +211,5 @@ class Notif
   end
 end
 
-pm = ProjectMonitor.new config: 'projects_notif.ini'
+pm = ProjectMonitor.new 'projects_notif.ini'
 pm.start
