@@ -19,7 +19,7 @@ class ProjectMonitor
     @od_monitor = conf[:main]['OD_monitor']
     @fr_skills = conf[:main]['fr_skills'].split /,\s*/
     @fl_match  = conf[:main]['fl_match'].split /,\s*/
-    @od_match  = conf[:main]['od_match'].split /,\s*/
+    @od_rss  = conf[:main]['od_rss']
     @sleeptime = conf[:main]['sleeptime'].to_i
     @notif = Notif.new(
         smtp_host: conf[:mail]['smtp_host'],
@@ -160,12 +160,11 @@ class ProjectMonitor
   end
 
   def odesk_com
-    uri = URI(URI.encode('https://www.odesk.com/jobs/rss?_redirected'))
+    uri = URI(URI.encode(@od_rss))
     feed = RSS::Parser.parse(open(uri))
     projects = Array.new
     feed.items.each do |item|
       puts "T: #{item.title}"
-      next unless @od_match.any? { |w| item.description =~ /#{w}/i }
       projects << Project.new(item.title, item.link, item.description, '-', '', '', :OD)
     end
     projects
