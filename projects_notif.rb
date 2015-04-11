@@ -19,7 +19,8 @@ class ProjectMonitor
                       :fr_skills, :fl_match, :od_rss,
                       :sleep_time, :hello_time,
                       :mail_login, :mail_pass,
-                      :smtp_host, :smtp_port) do
+                      :smtp_host, :smtp_port,
+                      :sleep_collect_projects, :sleep_check_state) do
     def read
       c = IniFile.load(self.config_file)
       abort "Unable to read ini-file #{self.config_file}" unless c
@@ -35,6 +36,8 @@ class ProjectMonitor
       self.smtp_port  = c[:mail]['smtp_port']
       self.mail_login = c[:mail]['login']
       self.mail_pass  = c[:mail]['pass']
+      self.sleep_collect_projects = c[:mail]['sleep_collect_projects']
+      self.sleep_check_state      = c[:mail]['sleep_sleep_check_state']
     end
   end
 
@@ -55,12 +58,25 @@ class ProjectMonitor
 
   def start
     puts 'start ProjectsMonitor'
+    threads = []
+    threads << Thread.new { collect_projects }
+    sleep 5
+    threads << Thread.new { check_state_from_email }
+    threads.each do |t|
+      t.abort_on_exception = true
+      t.join
+    end
+  end
+
+  private
+
+  def collect_projects
     sent_projects = []
 
     loop do
       @conf.read
 
-      # @notif.hello if time_for_hello?
+      @notif.hello if time_for_hello?
 
       projects = []
       begin
@@ -79,7 +95,7 @@ class ProjectMonitor
       sent_projects = sent_projects.pop(100)
 
       puts Time.now.to_s + " ProjectsMonitor receives #{projects.length} projects"
-      # send projects via email
+      send projects via email
       projects.each do |p|
         subject = "Subject: #{ p.source }: #{ p.title }"
         @notif.send subject, p.to_s
@@ -89,7 +105,9 @@ class ProjectMonitor
     end
   end
 
-  private
+  def check_state_from_email
+    puts 'run check_state_from_email'
+  end
 
   def freelancer_com
     url = 'https://www.freelancer.com/jobs/1/'
@@ -211,5 +229,5 @@ class Notif
   end
 end
 
-pm = ProjectMonitor.new 'projects_notif.ini'
-pm.start
+ProjectMonitor.new('projects_notif.ini').start
+
