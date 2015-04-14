@@ -8,6 +8,7 @@ class ProjectMonitor
   require 'net/smtp'
   require 'inifile'
   require 'rss'
+  require 'logger'
 
   Project = Struct.new(:title, :url, :desc, :bids, :skills, :price, :source) do
     def to_s
@@ -52,12 +53,14 @@ class ProjectMonitor
         pass:      @conf.mail_pass
     )
 
+    @log = Logger.new(File.basename(__FILE__, '.*') + '.log', 0, 1024 * 1024)
+
     @hello_send_day = Time.new(Time.now.year, Time.now.month, Time.now.day)
     @sent_hello = false
   end
 
   def start
-    puts 'start ProjectsMonitor'
+    @log.info 'start ProjectsMonitor'
     threads = []
     threads << Thread.new { collect_projects }
     sleep 5
@@ -84,9 +87,9 @@ class ProjectMonitor
         projects += fl_ru if @conf.fl_monitor
         projects += odesk_com if @conf.od_monitor
       rescue => e
-        puts 'Error while get projects!'
+        @log.error 'Error while get projects!'
         e_mess = "#{e.class}: #{e.message}"
-        puts e_mess
+        @log.error e_mess
         @notif.send 'Projects Notifier: Ошибка получения проектов!', e_mess
       end
       # delete sent project to not send dups of projects
@@ -94,7 +97,7 @@ class ProjectMonitor
       projects.each { |p| sent_projects << p.desc }
       sent_projects = sent_projects.pop(100)
 
-      puts Time.now.to_s + " ProjectsMonitor receives #{projects.length} projects"
+      @log.info Time.now.to_s + " ProjectsMonitor receives #{projects.length} projects"
       send projects via email
       projects.each do |p|
         subject = "Subject: #{ p.source }: #{ p.title }"
@@ -106,7 +109,7 @@ class ProjectMonitor
   end
 
   def check_state_from_email
-    puts 'run check_state_from_email'
+    @log.info 'run check_state_from_email'
   end
 
   def freelancer_com
@@ -231,3 +234,4 @@ end
 
 ProjectMonitor.new('projects_notif.ini').start
 
+000
