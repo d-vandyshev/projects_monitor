@@ -1,26 +1,25 @@
 [main]
-# Skip or process sources of projects
-FR_monitor = true
-FL_monitor = false
-OD_monitor = false
-
-# Match skills on freelance.com
-fr_skills = Golang, Ruby on Rails, Ruby
-
-# Odesk rss url
-od_rss = https://www.odesk.com/find-work-home/rss/?topic=111111&securityToken=XXXXX&_redirected
-
-# Match desc of project on fl.ru
-fl_match = ruby, rails
-
-# Time between retrieve and parse
 sleep_time = 60
-
-# Every day hello message to email
 hello_time = 10:00
 
+[freelancer]
+monitor = false
+uri = https://www.freelancer.com/jobs/1/
+skills = Golang, Web Scraping, Ruby on Rails, Ruby
+
+[fl_ru]
+monitor = true
+uri = https://www.fl.ru
+keywords = crawler, ruby, rails, web-scraping, golang
+
+[odesk]
+monitor = true
+uri = https://www.odesk.com/find-work-home/rss/?topic=111111&securityToken=XXXXXXXXXXXXXX&_redirected
+# add crawler, web-crawler
+
 [mail]
-login = login123
-pass = pass123
-smtp_host = smtp.mail.ru
+login = name@domain.com
+pass = password
+smtp_host = smtp.domain.com
 smtp_port = 587
+imap_host = imap.domain.com
