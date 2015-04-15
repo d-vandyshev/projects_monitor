@@ -16,41 +16,15 @@ class ProjectMonitor
     end
   end
 
-  Config = Struct.new(:config_file, :fr_monitor, :fl_monitor, :od_monitor,
-                      :fr_skills, :fl_match, :od_rss,
-                      :sleep_time, :hello_time,
-                      :mail_login, :mail_pass,
-                      :smtp_host, :smtp_port,
-                      :sleep_collect_projects, :sleep_check_state) do
-    def read
-      c = IniFile.load(self.config_file)
-      abort "Unable to read ini-file #{self.config_file}" unless c
-      self.fr_monitor = c[:main]['FR_monitor']
-      self.fl_monitor = c[:main]['FL_monitor']
-      self.od_monitor = c[:main]['OD_monitor']
-      self.fr_skills  = c[:main]['fr_skills'].split /,\s*/
-      self.fl_match   = c[:main]['fl_match'].split /,\s*/
-      self.od_rss     = c[:main]['od_rss']
-      self.sleep_time = c[:main]['sleep_time'].to_i
-      self.hello_time = c[:main]['hello_time']
-      self.smtp_host  = c[:mail]['smtp_host']
-      self.smtp_port  = c[:mail]['smtp_port']
-      self.mail_login = c[:mail]['login']
-      self.mail_pass  = c[:mail]['pass']
-      self.sleep_collect_projects = c[:mail]['sleep_collect_projects']
-      self.sleep_check_state      = c[:mail]['sleep_sleep_check_state']
-    end
-  end
-
   def initialize(config_file)
-    @conf = Config.new config_file
+    @conf = PMConfig.new config_file
     @conf.read
 
     @notif = Notif.new(
-        smtp_host: @conf.smtp_host,
-        smtp_port: @conf.smtp_port,
-        login:     @conf.mail_login,
-        pass:      @conf.mail_pass
+        smtp_host: @conf.mail.smtp_host,
+        smtp_port: @conf.mail.smtp_port,
+        login: @conf.mail.login,
+        pass: @conf.mail.pass
     )
 
     @log = Logger.new(File.basename(__FILE__, '.*') + '.log', 0, 1024 * 1024)
@@ -78,6 +52,20 @@ class ProjectMonitor
 
     loop do
       @conf.read
+
+      sources = []
+      @conf.sources.each do |source|
+        sources << case source.name
+                     when :fl_ru
+                       FL_ru.new source.uri
+                     when :freelancer
+                       Freelancer.new source.uri
+                     when :odesk
+                       Odesk.new source.uri
+                     else
+                       abort 'ERROR. Unknown method'
+                   end
+      end
 
       @notif.hello if time_for_hello?
 
@@ -112,11 +100,144 @@ class ProjectMonitor
     @log.info 'run check_state_from_email'
   end
 
-  def freelancer_com
-    url = 'https://www.freelancer.com/jobs/1/'
-    page = Nokogiri::HTML(open(url))
+
+  def time_for_hello?
+    # Switch to next day
+    timeday = Time.new(Time.now.year, Time.now.month, Time.now.day)
+    if (timeday <=> @hello_send_day) == 1
+      @hello_send_day = timeday
+      @sent_hello = false
+    end
+
+    # Check for hello time
+    now = Time.new
+    hello_hour, hello_minute = @conf.hello_time.split(':')
+    today_send_time = Time.new(Time.now.year, Time.now.month, Time.now.day, hello_hour, hello_minute)
+    if !@sent_hello and (now <=> today_send_time) == 1
+      @sent_hello = true
+      true
+    else
+      false
+    end
+  end
+end
+
+class PMConfig
+  attr_reader :mail, :sources, :sleep_time, :hello_time
+
+  Mail = Struct.new(:login, :pass, :smtp_host, :smtp_port, :imap_host)
+
+  def initialize(config_file)
+    @config_file = config_file
+  end
+
+  def read
+    c = IniFile.load(@config_file)
+    abort "Unable to read ini-file #{@config_file}" unless c
+    @mail = Mail.new(c[:mail]['login'],
+                     c[:mail]['pass'],
+                     c[:mail]['smtp_host'],
+                     c[:mail]['smtp_port'],
+                     c[:mail]['imap_host'])
+    @sources = []
+    @sources << Struct.new(:name,
+                           :monitor,
+                           :uri,
+                           :skills).new(:freelancer,
+                                        c[:freelancer]['monitor'],
+                                        c[:freelancer]['uri'],
+                                        c[:freelancer]['skills'])
+    @sources << Struct.new(:name,
+                           :monitor,
+                           :uri,
+                           :match).new(:fl_ru,
+                                       c[:fl_ru]['monitor'],
+                                       c[:fl_ru]['uri'],
+                                       c[:fl_ru]['match'])
+    @sources << Struct.new(:name,
+                           :monitor,
+                           :uri).new(:odesk,
+                                     c[:odesk]['monitor'],
+                                     c[:odesk]['uri'])
+
+    @sleep_time = c[:main]['sleep_time'].to_i
+    @hello_time = c[:main]['hello_time']
+  end
+end
+
+class Notif
+  def initialize(attr)
+    @login = attr[:login]
+    @pass = attr[:pass]
+    @smtp_host = attr[:smtp_host]
+    @smtp_port = attr[:smtp_port]
+  end
+
+  def hello
+    send 'Subject: Hello from Projects Notifier', 'Have a nice day'
+  end
+
+  def send(subject, body)
+    return "ok"
+    msg = "#{ subject }\n\n#{ body }"
+    begin
+      smtp = Net::SMTP.new @smtp_host, @smtp_port
+      smtp.enable_starttls
+      smtp.start('list.ru', @login, @pass, :plain) do
+        smtp.send_message(msg, @login, @login)
+      end
+    rescue => e
+      puts 'Error while send email!'
+      e_mess = "#{e.class}: #{e.message}"
+      puts e_mess
+    end
+    sleep 1
+  end
+end
+
+class Source
+  def initialize(uri)
+    @uri = uri
+  end
+end
+
+class FL_ru < Source
+  def get_content
+    user_agent = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/38.0.2125.101 YaBrowser/14.12.2125.8016 Safari/537.36'
+    text = File.read open(@uri + '/projects/', 'User-Agent' => user_agent)
+    text.encode!('utf-8', 'windows-1251')
+    text.gsub! '\');</script>', ''
+    text.gsub! '<script type="text/javascript">document.write(\'', ''
+    @page = Nokogiri::HTML(text)
+  end
+
+  def parse_projects
     projects = []
-    page.css('tr.project-details').each do |tr|
+    @page.css('div#projects-list div.b-post').each do |i|
+      p = Project.new
+      p.title = i.css('h2 a').text
+      p.url = base_url + i.css('h2 a').attribute('href')
+      p.desc = i.css('div.b-post__body').text.strip!
+
+      #Find keywords matches
+      next unless @conf.fl_match.any? { |w| p.desc =~ /#{w}/i }
+      p.bids = i.css('a.b-post__link_bold.b-page__desktop').text
+      p.price = i.css('.b-post__price').text.strip!
+      p.source = :FL
+      projects << p
+    end
+    projects
+  end
+end
+
+class Freelancer < Source
+  def get_content
+    @page = Nokogiri::HTML(open(@uri))
+  end
+
+  def parse_projects
+    projects = []
+    @page.css('tr.project-details').each do |tr|
       p = Project.new
       td = tr.child
 
@@ -145,93 +266,21 @@ class ProjectMonitor
     end
     projects
   end
+end
 
-  def fl_ru
-    base_url = 'https://www.fl.ru'
-    user_agent = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/38.0.2125.101 YaBrowser/14.12.2125.8016 Safari/537.36'
-    text = File.read open(base_url + '/projects/', 'User-Agent' => user_agent)
-    text.encode!('utf-8', 'windows-1251')
-    text.gsub! '\');</script>', ''
-    text.gsub! '<script type="text/javascript">document.write(\'', ''
-    page = Nokogiri::HTML(text)
-
-    projects = []
-    page.css('div#projects-list div.b-post').each do |i|
-      p = Project.new
-      p.title = i.css('h2 a').text
-      p.url = base_url + i.css('h2 a').attribute('href')
-      p.desc = i.css('div.b-post__body').text.strip!
-      #Find keywords matches
-      next unless @conf.fl_match.any? { |w| p.desc =~ /#{w}/i }
-      p.bids = i.css('a.b-post__link_bold.b-page__desktop').text
-      p.price = i.css('.b-post__price').text.strip!
-      p.source = :FL
-      projects << p
-    end
-    projects
+class Odesk < Source
+  def get_content
+    @page = open(URI(URI.encode(@uri)))
   end
 
-  def odesk_com
-    uri = URI(URI.encode(@conf.od_rss))
-    feed = RSS::Parser.parse(open(uri))
+  def parse_projects
+    feed = RSS::Parser.parse(@page)
     projects = []
     feed.items.each do |item|
       projects << Project.new(item.title, item.link, item.description, '-', '', '', :OD)
     end
     projects
   end
-
-  def time_for_hello?
-    # Switch to next day
-    timeday = Time.new(Time.now.year, Time.now.month, Time.now.day)
-    if (timeday <=> @hello_send_day) == 1
-      @hello_send_day = timeday
-      @sent_hello = false
-    end
-
-    # Check for hello time
-    now = Time.new
-    hello_hour, hello_minute = @conf.hello_time.split(':')
-    today_send_time = Time.new(Time.now.year, Time.now.month, Time.now.day, hello_hour, hello_minute)
-    if !@sent_hello and (now <=> today_send_time) == 1
-      @sent_hello = true
-      true
-    else
-      false
-    end
-  end
-end
-
-class Notif
-
-  def initialize(attr)
-    @login      = attr[:login]
-    @pass       = attr[:pass]
-    @smtp_host  = attr[:smtp_host]
-    @smtp_port  = attr[:smtp_port]
-  end
-
-  def hello
-    send 'Subject: Hello from Projects Notifier', 'Have a nice day'
-  end
-
-  def send(subject, body)
-    msg = "#{ subject }\n\n#{ body }"
-    begin
-      smtp = Net::SMTP.new @smtp_host, @smtp_port
-      smtp.enable_starttls
-      smtp.start('list.ru', @login, @pass, :plain) do
-        smtp.send_message(msg, @login, @login)
-      end
-    rescue => e
-        puts 'Error while send email!'
-        e_mess = "#{e.class}: #{e.message}"
-        puts e_mess
-    end
-    sleep 1
-  end
 end
 
 ProjectMonitor.new('projects_notif.ini').start
-
-000
