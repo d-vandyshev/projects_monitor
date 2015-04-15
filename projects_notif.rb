@@ -1,6 +1,4 @@
 # Conventions:
-# fr - freelance.com
-# fl - freelance.ru
 
 class ProjectMonitor
   require 'nokogiri'
@@ -9,12 +7,8 @@ class ProjectMonitor
   require 'inifile'
   require 'rss'
   require 'logger'
-
-  Project = Struct.new(:title, :url, :desc, :bids, :skills, :price, :source) do
-    def to_s
-      "Price:#{price}\nSkills:#{skills}\nUrl: #{url}\nBids:#{bids}\nDesc:#{desc}"
-    end
-  end
+  require 'singleton'
+  require 'net/imap'
 
   def initialize(config_file)
     @conf = PMConfig.new config_file
@@ -26,11 +20,10 @@ class ProjectMonitor
         login: @conf.mail.login,
         pass: @conf.mail.pass
     )
-
-    @log = Logger.new(File.basename(__FILE__, '.*') + '.log', 0, 1024 * 1024)
-
+    @log = Log.instance
     @hello_send_day = Time.new(Time.now.year, Time.now.month, Time.now.day)
     @sent_hello = false
+    @state = true
   end
 
   def start
@@ -51,17 +44,21 @@ class ProjectMonitor
     sent_projects = []
 
     loop do
+      unless @state
+        sleep @conf.sleep_time
+        next
+      end
+      @log.info 'Collect projects'
       @conf.read
-
       sources = []
       @conf.sources.each do |source|
         sources << case source.name
                      when :fl_ru
-                       FL_ru.new source.uri
+                       FL_ru.new source
                      when :freelancer
-                       Freelancer.new source.uri
+                       Freelancer.new source
                      when :odesk
-                       Odesk.new source.uri
+                       Odesk.new source
                      else
                        abort 'ERROR. Unknown method'
                    end
@@ -70,23 +67,39 @@ class ProjectMonitor
       @notif.hello if time_for_hello?
 
       projects = []
-      begin
-        projects += freelancer_com if @conf.fr_monitor
-        projects += fl_ru if @conf.fl_monitor
-        projects += odesk_com if @conf.od_monitor
-      rescue => e
-        @log.error 'Error while get projects!'
-        e_mess = "#{e.class}: #{e.message}"
-        @log.error e_mess
-        @notif.send 'Projects Notifier: Ошибка получения проектов!', e_mess
+      sources.each do |s|
+        @log.info "Process #{s.name}"
+        unless s.monitor
+          @log.info "Source #{s.name} is disabled"
+          next
+        end
+
+        # Receive content
+        begin
+          s.get_content
+        rescue => e
+          @log.error "Error while get_content on #{s.name}. #{e.class}: #{e.message}"
+          @notif.send 'PM: Network error for ' + s.name, "#{e.class}: #{e.message}"
+          next
+        end
+
+        # Parse projects
+        begin
+          projects += s.parse_projects
+        rescue => e
+          @log.error "Error while parse projects on #{s.name}. #{e.class}: #{e.message}"
+          @notif.send 'PM: Parse error for ' + s.name, "#{e.class}: #{e.message}"
+          s.monitor = false
+        end
       end
+
       # delete sent project to not send dups of projects
       projects.delete_if { |p| sent_projects.include?(p.desc) }
       projects.each { |p| sent_projects << p.desc }
       sent_projects = sent_projects.pop(100)
 
-      @log.info Time.now.to_s + " ProjectsMonitor receives #{projects.length} projects"
-      send projects via email
+      @log.info "Receives #{projects.length} projects"
+      # send projects via email
       projects.each do |p|
         subject = "Subject: #{ p.source }: #{ p.title }"
         @notif.send subject, p.to_s
@@ -97,7 +110,19 @@ class ProjectMonitor
   end
 
   def check_state_from_email
-    @log.info 'run check_state_from_email'
+    @log.info 'Process check state on email'
+    imap = Net::IMAP.new(@conf.mail.imap_host)
+    imap.starttls
+    imap.login(@conf.mail.login, @conf.mail.pass)
+    imap.examine('inbox')
+    imap.uid_search(%w{UNSEEN}).each do |uid|
+      subject = imap.uid_fetch(uid, 'ENVELOPE')[0].attr['ENVELOPE'].subject
+      if subject === 'pmstopl'
+        @state = false
+      elsif subject === 'pmstart'
+        @state = true
+      end
+    end
   end
 
 
@@ -129,9 +154,11 @@ class PMConfig
 
   def initialize(config_file)
     @config_file = config_file
+    @log = Log.instance
   end
 
   def read
+    @log.info('Read config ' + @config_file)
     c = IniFile.load(@config_file)
     abort "Unable to read ini-file #{@config_file}" unless c
     @mail = Mail.new(c[:mail]['login'],
@@ -146,14 +173,14 @@ class PMConfig
                            :skills).new(:freelancer,
                                         c[:freelancer]['monitor'],
                                         c[:freelancer]['uri'],
-                                        c[:freelancer]['skills'])
+                                        c[:freelancer]['skills'].split(/,\s*/))
     @sources << Struct.new(:name,
                            :monitor,
                            :uri,
-                           :match).new(:fl_ru,
+                           :keywords).new(:fl_ru,
                                        c[:fl_ru]['monitor'],
                                        c[:fl_ru]['uri'],
-                                       c[:fl_ru]['match'])
+                                       c[:fl_ru]['keywords'].split(/,\s*/))
     @sources << Struct.new(:name,
                            :monitor,
                            :uri).new(:odesk,
@@ -196,12 +223,27 @@ class Notif
 end
 
 class Source
-  def initialize(uri)
-    @uri = uri
+  attr_accessor :monitor, :name
+
+  Project = Struct.new(:title, :url, :desc, :bids, :skills, :price, :source) do
+    def to_s
+      "Price:#{price}\nSkills:#{skills}\nUrl: #{url}\nBids:#{bids}\nDesc:#{desc}"
+    end
+  end
+
+  def initialize(source)
+    @name = source.name
+    @monitor = source.monitor
+    @uri = source.uri
   end
 end
 
 class FL_ru < Source
+  def initialize(source)
+    super
+    @keywords = source.keywords
+  end
+
   def get_content
     user_agent = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/38.0.2125.101 YaBrowser/14.12.2125.8016 Safari/537.36'
     text = File.read open(@uri + '/projects/', 'User-Agent' => user_agent)
@@ -216,11 +258,11 @@ class FL_ru < Source
     @page.css('div#projects-list div.b-post').each do |i|
       p = Project.new
       p.title = i.css('h2 a').text
-      p.url = base_url + i.css('h2 a').attribute('href')
+      p.url = @uri + i.css('h2 a').attribute('href')
       p.desc = i.css('div.b-post__body').text.strip!
 
       #Find keywords matches
-      next unless @conf.fl_match.any? { |w| p.desc =~ /#{w}/i }
+      next unless @keywords.any? { |w| p.desc =~ /#{w}/i }
       p.bids = i.css('a.b-post__link_bold.b-page__desktop').text
       p.price = i.css('.b-post__price').text.strip!
       p.source = :FL
@@ -231,6 +273,11 @@ class FL_ru < Source
 end
 
 class Freelancer < Source
+  def initialize(source)
+    super
+    @skills = source.skills
+  end
+
   def get_content
     @page = Nokogiri::HTML(open(@uri))
   end
@@ -283,4 +330,30 @@ class Odesk < Source
   end
 end
 
+class MultiIO
+  def initialize(*targets)
+    @targets = targets
+  end
+
+  def write(*args)
+    @targets.each { |t| t.write(*args) }
+  end
+
+  def close
+    @targets.each(&:close)
+  end
+end
+
+# Singleton logger
+class Log < Logger
+  include Singleton
+  @@old_initialize = Logger.instance_method :initialize
+
+  def initialize
+    log_file = File.open(File.basename(__FILE__, '.*') + '.log', 'a')
+    @@old_initialize.bind(self).call(MultiIO.new(STDOUT, log_file), 0, 1024 * 1024)
+  end
+end
+
 ProjectMonitor.new('projects_notif.ini').start
+
