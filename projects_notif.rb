@@ -124,6 +124,7 @@ class ProjectMonitor
           @state = true
         end
       end
+      sleep 300
     end
   end
 
