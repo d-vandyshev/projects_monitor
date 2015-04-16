@@ -110,17 +110,19 @@ class ProjectMonitor
   end
 
   def check_state_from_email
-    @log.info 'Process check state on email'
-    imap = Net::IMAP.new(@conf.mail.imap_host)
-    imap.starttls
-    imap.login(@conf.mail.login, @conf.mail.pass)
-    imap.examine('inbox')
-    imap.uid_search(%w{UNSEEN}).each do |uid|
-      subject = imap.uid_fetch(uid, 'ENVELOPE')[0].attr['ENVELOPE'].subject
-      if subject === 'pmstopl'
-        @state = false
-      elsif subject === 'pmstart'
-        @state = true
+    loop do
+      @log.info 'Process check state on email'
+      imap = Net::IMAP.new(@conf.mail.imap_host)
+      imap.starttls
+      imap.login(@conf.mail.login, @conf.mail.pass)
+      imap.examine('inbox')
+      imap.uid_search(%w{UNSEEN}).each do |uid|
+        subject = imap.uid_fetch(uid, 'ENVELOPE')[0].attr['ENVELOPE'].subject
+        if subject === 'pmstopl'
+          @state = false
+        elsif subject === 'pmstart'
+          @state = true
+        end
       end
     end
   end
@@ -178,9 +180,9 @@ class PMConfig
                            :monitor,
                            :uri,
                            :keywords).new(:fl_ru,
-                                       c[:fl_ru]['monitor'],
-                                       c[:fl_ru]['uri'],
-                                       c[:fl_ru]['keywords'].split(/,\s*/))
+                                          c[:fl_ru]['monitor'],
+                                          c[:fl_ru]['uri'],
+                                          c[:fl_ru]['keywords'].split(/,\s*/))
     @sources << Struct.new(:name,
                            :monitor,
                            :uri).new(:odesk,
