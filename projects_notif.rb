@@ -205,7 +205,6 @@ class Notif
   end
 
   def send(subject, body)
-    return "ok"
     msg = "#{ subject }\n\n#{ body }"
     begin
       smtp = Net::SMTP.new @smtp_host, @smtp_port
