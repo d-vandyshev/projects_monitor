@@ -79,7 +79,7 @@ class ProjectMonitor
           s.get_content
         rescue => e
           @log.error "Error while get_content on #{s.name}. #{e.class}: #{e.message}"
-          @notif.send 'PM: Network error for ' + s.name, "#{e.class}: #{e.message}"
+          @notif.send "PM: Network error for #{s.name}", " #{e.class}: #{e.message}"
           next
         end
 
@@ -88,7 +88,7 @@ class ProjectMonitor
           projects += s.parse_projects
         rescue => e
           @log.error "Error while parse projects on #{s.name}. #{e.class}: #{e.message}"
-          @notif.send 'PM: Parse error for ' + s.name, "#{e.class}: #{e.message}"
+          @notif.send "PM: Parse error for #{s.name}", "#{e.class}: #{e.message}"
           s.monitor = false
         end
       end
