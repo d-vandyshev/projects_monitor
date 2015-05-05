@@ -118,7 +118,7 @@ class ProjectMonitor
       imap.examine('inbox')
       imap.uid_search(%w{UNSEEN}).each do |uid|
         subject = imap.uid_fetch(uid, 'ENVELOPE')[0].attr['ENVELOPE'].subject
-        if subject === 'pmstopl'
+        if subject === 'pmstop'
           @state = false
         elsif subject === 'pmstart'
           @state = true
