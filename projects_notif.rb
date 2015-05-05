@@ -80,6 +80,7 @@ class ProjectMonitor
         rescue => e
           @log.error "Error while get_content on #{s.name}. #{e.class}: #{e.message}"
           @notif.send "PM: Network error for #{s.name}", " #{e.class}: #{e.message}"
+          s.monitor = false
           next
         end
 
