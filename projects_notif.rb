@@ -230,7 +230,12 @@ class Source
 
   Project = Struct.new(:title, :url, :desc, :bids, :skills, :price, :source) do
     def to_s
-      "Price:#{price}\nSkills:#{skills}\nUrl: #{url}\nBids:#{bids}\nDesc:#{desc}"
+      s = ''
+      s += "Price: #{price}" unless price.empty?
+      s += "\nSkills: #{skills}" unless skills.empty?
+      s += "\nUrl: #{url}" unless url.empty?
+      s += "\nBids:#{bids}" unless bids.empty?
+      s += "\nDesc:#{desc}: #{price}" unless desc.empty?
     end
   end
 
@@ -327,6 +332,7 @@ class Upwork < Source
     feed = RSS::Parser.parse(@page)
     projects = []
     feed.items.each do |item|
+      item.description.sub! ' - Upwork', ''
       projects << Project.new(item.title, item.link, item.description, '-', '', '', :UW)
     end
     projects
