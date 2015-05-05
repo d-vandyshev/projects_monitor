@@ -57,8 +57,8 @@ class ProjectMonitor
                        FL_ru.new source
                      when :freelancer
                        Freelancer.new source
-                     when :odesk
-                       Odesk.new source
+                     when :upwork
+                       Upwork.new source
                      else
                        abort 'ERROR. Unknown method'
                    end
@@ -187,9 +187,9 @@ class PMConfig
                                           c[:fl_ru]['keywords'].split(/,\s*/))
     @sources << Struct.new(:name,
                            :monitor,
-                           :uri).new(:odesk,
-                                     c[:odesk]['monitor'],
-                                     c[:odesk]['uri'])
+                           :uri).new(:upwork,
+                                     c[:upwork]['monitor'],
+                                     c[:upwork]['uri'])
 
     @sleep_time = c[:main]['sleep_time'].to_i
     @hello_time = c[:main]['hello_time']
@@ -318,7 +318,7 @@ class Freelancer < Source
   end
 end
 
-class Odesk < Source
+class Upwork < Source
   def get_content
     @page = open(URI(URI.encode(@uri)))
   end
@@ -327,7 +327,7 @@ class Odesk < Source
     feed = RSS::Parser.parse(@page)
     projects = []
     feed.items.each do |item|
-      projects << Project.new(item.title, item.link, item.description, '-', '', '', :OD)
+      projects << Project.new(item.title, item.link, item.description, '-', '', '', :UW)
     end
     projects
   end

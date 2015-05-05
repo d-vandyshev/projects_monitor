@@ -12,9 +12,9 @@ monitor = true
 uri = https://www.fl.ru
 keywords = crawler, ruby, rails, web-scraping, golang
 
-[odesk]
+[upwork]
 monitor = true
-uri = https://www.odesk.com/find-work-home/rss/?topic=111111&securityToken=XXXXXXXXXXXXXX&_redirected
+uri = https://www.upwork.com/find-work-home/rss/?topic=111111&securityToken=XXXXXXXXXXXXXX&_redirected
 # add crawler, web-crawler
 
 [mail]
