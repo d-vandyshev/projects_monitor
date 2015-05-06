@@ -9,6 +9,7 @@ class ProjectMonitor
   require 'logger'
   require 'singleton'
   require 'net/imap'
+  require 'net/http'
 
   def initialize(config_file)
     @conf = PMConfig.new config_file
@@ -287,35 +288,21 @@ class Freelancer < Source
   end
 
   def get_content
-    @page = Nokogiri::HTML(open(@uri))
+    @page = Net::HTTP.get(@uri)
   end
 
   def parse_projects
     projects = []
-    @page.css('tr.project-details').each do |tr|
+    all_skills = JSON.parse(content[/var jobInfo = (.*);/, 1])
+    all_projects = JSON.parse(content[/var aaData = (.*);/, 1])
+    all_projects.each do |e|
       p = Project.new
-      td = tr.child
-
-      #Title and URL
-      td = td.next_element
-      td.css('ul.promotions').remove
-      p.title = td.css('a').text.strip!
-      p.url = td.css('a').attribute('href')
-
-      td = td.next_element
-      p.desc = td.text
-      td = td.next_element
-      p.bids = td.text
-
-      td = td.next_element
-      a = td.css('a').map { |a| a.text }
-      p.skills = @conf.fr_skills & a
-      next if p.skills.count == 0
-
-      td = td.next_element
-      td = td.next_element
-      td = td.next_element
-      p.price = td.text
+      p.title = e[1]
+      p.url = e[21]
+      p.desc = e[2]
+      p.bids = e[3]
+      p.skills = e[4].split(/,/).map{ |s| all_skills[s]["name"]}.join(', ')
+      p.price = "#{e[32]['minbudget_usd']}-#{e[32]['maxbudget_usd']}"
       p.source = :FR
       projects << p
     end
