@@ -10,6 +10,7 @@ class ProjectMonitor
   require 'singleton'
   require 'net/imap'
   require 'net/http'
+  require 'json'
 
   def initialize(config_file)
     @conf = PMConfig.new config_file
@@ -232,11 +233,11 @@ class Source
   Project = Struct.new(:title, :url, :desc, :bids, :skills, :price, :source) do
     def to_s
       s = ''
-      s += "Price: #{price}" unless price.empty?
-      s += "\nSkills: #{skills}" unless skills.empty?
-      s += "\nUrl: #{url}" unless url.empty?
-      s += "\nBids:#{bids}" unless bids.empty?
-      s += "\nDesc:#{desc}: #{price}" unless desc.empty?
+      s += "Price: #{price}" unless price.nil?
+      s += "\nSkills: #{skills}" unless skills.nil?
+      s += "\nUrl: #{url}" unless url.nil?
+      s += "\nBids:#{bids}" unless bids.nil?
+      s += "\nDesc:#{desc}: #{price}" unless desc.nil?
     end
   end
 
@@ -288,13 +289,13 @@ class Freelancer < Source
   end
 
   def get_content
-    @page = Net::HTTP.get(@uri)
+    @page = Net::HTTP.get(URI.parse(@uri))
   end
 
   def parse_projects
     projects = []
-    all_skills = JSON.parse(content[/var jobInfo = (.*);/, 1])
-    all_projects = JSON.parse(content[/var aaData = (.*);/, 1])
+    all_skills = JSON.parse(@page[/var jobInfo = (.*);/, 1])
+    all_projects = JSON.parse(@page[/var aaData = (.*);/, 1])
     all_projects.each do |e|
       p = Project.new
       p.title = e[1]
@@ -302,7 +303,7 @@ class Freelancer < Source
       p.desc = e[2]
       p.bids = e[3]
       p.skills = e[4].split(/,/).map{ |s| all_skills[s]["name"]}.join(', ')
-      p.price = "#{e[32]['minbudget_usd']}-#{e[32]['maxbudget_usd']}"
+      p.price = "#{e[32]['minbudget_usd']}-#{e[32]['maxbudget_usd']}" unless e[32].nil?
       p.source = :FR
       projects << p
     end
