@@ -302,7 +302,7 @@ class Freelancer < Source
       p.skills = @skills & skills_project
       next if p.skills.count == 0
       p.title = e[1]
-      p.url = e[21]
+      p.url = 'https://freelancer.com' + e[21]
       p.desc = e[2]
       p.bids = e[3]
       p.price = "#{e[32]['minbudget_usd']}-#{e[32]['maxbudget_usd']}" unless e[32].nil?
