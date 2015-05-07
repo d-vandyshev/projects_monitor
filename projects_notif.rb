@@ -297,12 +297,14 @@ class Freelancer < Source
     all_skills = JSON.parse(@page[/var jobInfo = (.*);/, 1])
     all_projects = JSON.parse(@page[/var aaData = (.*);/, 1])
     all_projects.each do |e|
+      skills = e[4].split(/,/).map{ |s| all_skills[s]["name"]}
+      p.skills = @conf.fr_skills & skills
+      next if p.skills.count == 0
       p = Project.new
       p.title = e[1]
       p.url = e[21]
       p.desc = e[2]
       p.bids = e[3]
-      p.skills = e[4].split(/,/).map{ |s| all_skills[s]["name"]}.join(', ')
       p.price = "#{e[32]['minbudget_usd']}-#{e[32]['maxbudget_usd']}" unless e[32].nil?
       p.source = :FR
       projects << p
