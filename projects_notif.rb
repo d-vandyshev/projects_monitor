@@ -322,7 +322,7 @@ class Upwork < Source
     feed = RSS::Parser.parse(@page)
     projects = []
     feed.items.each do |item|
-      item.description.sub! ' - Upwork', ''
+      item.title.sub! ' - Upwork', ''
       projects << Project.new(item.title, item.link, item.description, '-', '', '', :UW)
     end
     projects
