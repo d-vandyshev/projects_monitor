@@ -87,13 +87,13 @@ class ProjectMonitor
         end
 
         # Parse projects
-        begin
+        # begin
           projects += s.parse_projects
-        rescue => e
-          @log.error "Error while parse projects on #{s.name}. #{e.class}: #{e.message}"
-          @notif.send "PM: Parse error for #{s.name}", "#{e.class}: #{e.message}"
-          s.monitor = false
-        end
+        # rescue => e
+        #   @log.error "Error while parse projects on #{s.name}. #{e.class}: #{e.message}"
+        #   @notif.send "PM: Parse error for #{s.name}", "#{e.class}: #{e.message}"
+        #   s.monitor = false
+        # end
       end
 
       # delete sent project to not send dups of projects
@@ -297,10 +297,10 @@ class Freelancer < Source
     all_skills = JSON.parse(@page[/var jobInfo = (.*);/, 1])
     all_projects = JSON.parse(@page[/var aaData = (.*);/, 1])
     all_projects.each do |e|
-      skills = e[4].split(/,/).map{ |s| all_skills[s]["name"]}
-      p.skills = @conf.fr_skills & skills
-      next if p.skills.count == 0
       p = Project.new
+      skills_project = e[4].split(/,/).map{ |s| all_skills[s]["name"]}
+      p.skills = @skills & skills_project
+      next if p.skills.count == 0
       p.title = e[1]
       p.url = e[21]
       p.desc = e[2]
