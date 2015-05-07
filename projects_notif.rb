@@ -87,13 +87,13 @@ class ProjectMonitor
         end
 
         # Parse projects
-        # begin
+        begin
           projects += s.parse_projects
-        # rescue => e
-        #   @log.error "Error while parse projects on #{s.name}. #{e.class}: #{e.message}"
-        #   @notif.send "PM: Parse error for #{s.name}", "#{e.class}: #{e.message}"
-        #   s.monitor = false
-        # end
+        rescue => e
+          @log.error "Error while parse projects on #{s.name}. #{e.class}: #{e.message}"
+          @notif.send "PM: Parse error for #{s.name}", "#{e.class}: #{e.message}"
+          s.monitor = false
+        end
       end
 
       # delete sent project to not send dups of projects
