@@ -123,8 +123,10 @@ class ProjectMonitor
         subject = imap.uid_fetch(uid, 'ENVELOPE')[0].attr['ENVELOPE'].subject
         if subject === 'pmstop'
           @state = false
+	  @log.info "Receive pmstop command via email"
         elsif subject === 'pmstart'
           @state = true
+	  @log.info "Receive pmstart command via email"
         end
       end
       sleep 300
