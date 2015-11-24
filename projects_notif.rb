@@ -357,4 +357,3 @@ class Log < Logger
 end
 
 ProjectMonitor.new('projects_notif.ini').start
-
