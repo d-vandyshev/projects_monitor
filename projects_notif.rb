@@ -45,27 +45,27 @@ class ProjectMonitor
   def collect_projects
     sent_projects = []
 
+    @conf.read
+    sources = []
+    @conf.sources.each do |source|
+      sources << case source.name
+                   when :fl_ru
+                     FL_ru.new source
+                   when :freelancer
+                     Freelancer.new source
+                   when :upwork
+                     Upwork.new source
+                   else
+                     abort 'ERROR. Unknown method'
+                 end
+    end
+
     loop do
       unless @state
         sleep @conf.sleep_time
         next
       end
       @log.info 'Collect projects'
-      @conf.read
-      sources = []
-      @conf.sources.each do |source|
-        sources << case source.name
-                     when :fl_ru
-                       FL_ru.new source
-                     when :freelancer
-                       Freelancer.new source
-                     when :upwork
-                       Upwork.new source
-                     else
-                       abort 'ERROR. Unknown method'
-                   end
-      end
-
       @notif.hello if time_for_hello?
 
       projects = []
@@ -91,6 +91,7 @@ class ProjectMonitor
           projects += s.parse_projects
         rescue => e
           @log.error "Error while parse projects on #{s.name}. #{e.class}: #{e.message}"
+          @log.error "Source page: #{s.page}"
           @notif.send "PM: Parse error for #{s.name}", "#{e.class}: #{e.message}"
           s.monitor = false
         end
@@ -123,10 +124,10 @@ class ProjectMonitor
         subject = imap.uid_fetch(uid, 'ENVELOPE')[0].attr['ENVELOPE'].subject
         if subject === 'pmstop'
           @state = false
-	  @log.info "Receive pmstop command via email"
+          @log.info "Receive pmstop command via email"
         elsif subject === 'pmstart'
           @state = true
-	  @log.info "Receive pmstart command via email"
+          @log.info "Receive pmstart command via email"
         end
       end
       sleep 300
@@ -206,6 +207,7 @@ class Notif
     @pass = attr[:pass]
     @smtp_host = attr[:smtp_host]
     @smtp_port = attr[:smtp_port]
+    @log = Log.instance
   end
 
   def hello
@@ -213,7 +215,8 @@ class Notif
   end
 
   def send(subject, body)
-    msg = "#{ subject }\n\n#{ body }"
+    msg = "#{subject}\n\n#{body}"
+    @log.info "Notif send message: #{msg}"
     begin
       smtp = Net::SMTP.new @smtp_host, @smtp_port
       smtp.enable_starttls
@@ -300,7 +303,7 @@ class Freelancer < Source
     all_projects = JSON.parse(@page[/var aaData = (.*);/, 1])
     all_projects.each do |e|
       p = Project.new
-      skills_project = e[4].split(/,/).map{ |s| all_skills[s]["name"]}
+      skills_project = e[4].split(/,/).map{|s| all_skills[s]['name']}
       p.skills = @skills & skills_project
       next if p.skills.count == 0
       p.title = e[1]
