@@ -25,7 +25,7 @@ class ProjectMonitor
     @log = Log.instance
     @hello_send_day = Time.new(Time.now.year, Time.now.month, Time.now.day)
     @sent_hello = false
-    @state = true
+    @enable_collect = true
   end
 
   def start
@@ -61,7 +61,7 @@ class ProjectMonitor
     end
 
     loop do
-      unless @state
+      unless @enable_collect
         sleep @conf.sleep_time
         next
       end
@@ -85,6 +85,7 @@ class ProjectMonitor
           s.monitor = false
           next
         end
+
 
         # Parse projects
         begin
@@ -123,10 +124,10 @@ class ProjectMonitor
       imap.uid_search(%w{UNSEEN}).each do |uid|
         subject = imap.uid_fetch(uid, 'ENVELOPE')[0].attr['ENVELOPE'].subject
         if subject === 'pmstop'
-          @state = false
+          @enable_collect = false
           @log.info "Receive pmstop command via email"
         elsif subject === 'pmstart'
-          @state = true
+          @enable_collect = true
           @log.info "Receive pmstart command via email"
         end
       end
@@ -216,7 +217,6 @@ class Notif
 
   def send(subject, body)
     msg = "#{subject}\n\n#{body}"
-    @log.info "Notif send message: #{msg}"
     begin
       smtp = Net::SMTP.new @smtp_host, @smtp_port
       smtp.enable_starttls
