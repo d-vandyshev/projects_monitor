@@ -80,12 +80,11 @@ class ProjectMonitor
         begin
           s.get_content
         rescue => e
-          @log.error "Error while get_content on #{s.name}. #{e.class}: #{e.message}"
-          @notif.send "PM: Network error for #{s.name}", " #{e.class}: #{e.message}"
+          @log.error "Error while get_content on #{s.name}, URL: #{s.uri}. #{e.class}: #{e.message}"
+          @notif.send "PM: Network error for #{s.name}", "URL: #{s.uri}. Error: #{e.class}: #{e.message}"
           s.monitor = false
           next
         end
-
 
         # Parse projects
         begin
@@ -234,6 +233,7 @@ end
 
 class Source
   attr_accessor :monitor, :name
+  attr_reader :uri
 
   Project = Struct.new(:title, :url, :desc, :bids, :skills, :price, :source) do
     def to_s
