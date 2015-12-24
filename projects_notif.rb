@@ -233,7 +233,7 @@ end
 
 class Source
   attr_accessor :monitor, :name
-  attr_reader :uri
+  attr_reader :uri, :page
 
   Project = Struct.new(:title, :url, :desc, :bids, :skills, :price, :source) do
     def to_s
@@ -250,6 +250,7 @@ class Source
     @name = source.name
     @monitor = source.monitor
     @uri = source.uri
+    @page = String.new
   end
 end
 
@@ -303,7 +304,9 @@ class Freelancer < Source
     all_projects = JSON.parse(@page[/var aaData = (.*);/, 1])
     all_projects.each do |e|
       p = Project.new
-      skills_project = e[4].split(/,/).map{|s| all_skills[s]['name']}
+      skills_project = e[4].split(/,/).map do |s|
+        all_skills[s]['name'] if all_skills.include?(s) && all_skills[s].include?('name')
+      end
       p.skills = @skills & skills_project
       next if p.skills.count == 0
       p.title = e[1]
