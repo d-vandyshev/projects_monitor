@@ -60,6 +60,7 @@ class ProjectMonitor
                  end
     end
 
+    first_pass = true
     loop do
       unless @enable_collect
         sleep @conf.sleep_time
@@ -95,6 +96,12 @@ class ProjectMonitor
           @notif.send "PM: Parse error for #{s.name}", "#{e.class}: #{e.message}"
           s.monitor = false
         end
+      end
+
+      # when first pass we do not send email
+      if first_pass
+        projects.each { |p| sent_projects << p.desc }
+        first_pass = false
       end
 
       # delete sent project to not send dups of projects
